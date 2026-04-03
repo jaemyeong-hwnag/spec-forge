@@ -1,0 +1,95 @@
+{% if items %}
+{% set critical_count = items | selectattr('critical') | list | length %}
+{% set cat_labels = {'env': '환경변수', 'secret': '시크릿/키', 'service': '외부 서비스', 'docs': '문서/스펙', 'dependency': '의존성'} %}
+
+{% if critical_count > 0 %}
+<div class="prereq-warning">
+  <span class="prereq-warning-icon">⚠</span>
+  필수 항목 <strong>{{ critical_count }}개</strong>를 실행 전에 확인하세요.
+  항목이 없으면 Claude가 같은 문제를 반복 시도합니다.
+</div>
+{% endif %}
+
+<ul class="prereq-list">
+{% for item in items %}
+<li class="prereq-item {% if item.critical %}prereq-critical{% endif %}" id="prereq-{{ loop.index0 }}">
+  <label class="prereq-check-label">
+    <input type="checkbox" class="prereq-checkbox" data-idx="{{ loop.index0 }}"
+           onchange="togglePrereqDone({{ loop.index0 }}, '{{ item_id }}')">
+    <span class="prereq-check-box"></span>
+  </label>
+  <div class="prereq-body">
+    <div class="prereq-header">
+      <span class="prereq-name">{{ item.name }}</span>
+      <span class="prereq-cat">{{ cat_labels.get(item.cat, item.cat) }}</span>
+      {% if item.critical %}<span class="badge badge-error" style="font-size:10px">필수</span>{% endif %}
+    </div>
+    {% if item.description %}<p class="prereq-desc">{{ item.description }}</p>{% endif %}
+    {% if item.hint %}<p class="prereq-hint">💡 {{ item.hint }}</p>{% endif %}
+  </div>
+</li>
+{% endfor %}
+</ul>
+
+<div class="prereq-actions">
+  <button onclick="refreshPrerequisites('{{ item_id }}')" class="btn-sm btn-view">↺ 재분석</button>
+  <span id="prereq-status-{{ item_id }}" class="muted" style="font-size:12px"></span>
+</div>
+
+<script>
+(function() {
+  const STORAGE_KEY = 'prereq_checked_{{ item_id }}';
+  const checked = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  checked.forEach(idx => {
+    const cb = document.querySelector(`.prereq-checkbox[data-idx="${idx}"]`);
+    const item = document.getElementById('prereq-' + idx);
+    if (cb) { cb.checked = true; if (item) item.classList.add('prereq-done'); }
+  });
+  updatePrereqStatus('{{ item_id }}');
+})();
+
+window.togglePrereqDone = function(idx, itemId) {
+  const STORAGE_KEY = 'prereq_checked_' + itemId;
+  let checked = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  const item = document.getElementById('prereq-' + idx);
+  const cb = document.querySelector(`.prereq-checkbox[data-idx="${idx}"]`);
+  if (cb && cb.checked) {
+    if (!checked.includes(idx)) checked.push(idx);
+    if (item) item.classList.add('prereq-done');
+  } else {
+    checked = checked.filter(i => i !== idx);
+    if (item) item.classList.remove('prereq-done');
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(checked));
+  updatePrereqStatus(itemId);
+};
+
+window.updatePrereqStatus = function(itemId) {
+  const STORAGE_KEY = 'prereq_checked_' + itemId;
+  const checked = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  const total = document.querySelectorAll('.prereq-checkbox').length;
+  const criticals = document.querySelectorAll('.prereq-critical .prereq-checkbox').length;
+  const checkedCriticals = document.querySelectorAll('.prereq-critical .prereq-checkbox:checked').length;
+  const el = document.getElementById('prereq-status-' + itemId);
+  if (el) {
+    if (criticals > 0 && checkedCriticals < criticals) {
+      el.textContent = `필수 ${criticals - checkedCriticals}개 미확인`;
+      el.style.color = 'var(--error)';
+    } else {
+      el.textContent = `${checked.length}/${total} 확인 완료`;
+      el.style.color = 'var(--success)';
+    }
+  }
+};
+
+window.refreshPrerequisites = function(itemId) {
+  const container = document.getElementById('prereq-container');
+  if (container) {
+    container.innerHTML = '<p class="muted" style="padding:8px 0">재분석 중...</p>';
+    htmx.ajax('GET', `/spec/${itemId}/prerequisites?refresh=true`, {target: '#prereq-container', swap: 'innerHTML'});
+  }
+};
+</script>
+{% else %}
+<p class="muted" style="padding:8px 0;font-size:12px">사전 요구사항이 없습니다.</p>
+{% endif %}

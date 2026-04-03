@@ -1,0 +1,147 @@
+<!-- 최종 스펙 + AI 프롬프트 표시 (사람 최적화 출력) -->
+<div class="spec-panel">
+  <div class="spec-header">
+    <h2>{{ spec.title }}</h2>
+    <span class="badge badge-complete">완료</span>
+    <span class="muted">{{ spec.created_at[:19] if spec.created_at else '' }}</span>
+  </div>
+
+  <div class="spec-actions">
+    <button
+      hx-post="/spec/save/{{ spec.item_id }}"
+      hx-target="#save-result"
+      hx-swap="innerHTML"
+      class="btn-primary">
+      ✓ 저장 확인
+    </button>
+    <button
+      hx-post="/execute/{{ spec.item_id }}/prepare"
+      hx-target="#execute-container"
+      hx-swap="innerHTML"
+      hx-indicator="#exec-spinner"
+      class="btn-view">
+      ▶ 레포별 실행 준비
+    </button>
+    <button
+      hx-get="/execute/{{ spec.item_id }}/panel"
+      hx-target="#execute-container"
+      hx-swap="innerHTML"
+      class="btn-sm btn-view">
+      ↺ 실행 패널 복원
+    </button>
+    <span id="exec-spinner" class="htmx-indicator">레포별 프롬프트 생성 중...</span>
+    <span id="save-result"></span>
+  </div>
+
+  <!-- 실행 전 체크리스트 -->
+  <div class="prereq-section">
+    <div class="prereq-section-header" onclick="togglePrereqSection()">
+      <span class="prereq-section-title">실행 전 체크리스트</span>
+      <span id="prereq-toggle-icon">▼</span>
+      <button onclick="event.stopPropagation(); htmx.ajax('GET', '/spec/{{ spec.item_id }}/prerequisites', {target: '#prereq-container', swap: 'innerHTML'})"
+        class="btn-sm btn-view" style="margin-left:auto" id="prereq-gen-btn">분석</button>
+    </div>
+    <div id="prereq-container" style="display:none"
+      hx-get="/spec/{{ spec.item_id }}/prerequisites"
+      hx-trigger="revealed"
+      hx-swap="innerHTML">
+    </div>
+  </div>
+
+  <div id="execute-container"></div>
+
+  <script>
+  (function() {
+    fetch('/execute/{{ spec.item_id }}/status')
+      .then(r => r.json())
+      .then(data => {
+        const hasState = Object.values(data).some(info => info.status && info.status !== 'pending');
+        if (hasState) {
+          htmx.ajax('GET', '/execute/{{ spec.item_id }}/panel', {target: '#execute-container', swap: 'innerHTML'});
+        }
+      })
+      .catch(() => {});
+  })();
+  </script>
+
+  <div class="spec-tabs">
+    <button class="tab active" onclick="showTab('overview', event)">Overview</button>
+    <button class="tab" onclick="showTab('architecture', event)">Architecture</button>
+    <button class="tab" onclick="showTab('interfaces', event)">Interfaces</button>
+    <button class="tab" onclick="showTab('plan', event)">구현 계획</button>
+    <button class="tab" onclick="showTab('prompts', event)">AI 프롬프트</button>
+  </div>
+
+  <div id="tab-overview" class="tab-content active">
+    <pre class="spec-text">{{ spec.overview }}</pre>
+    <div class="download-bar">
+      <a href="/spec/{{ spec.item_id }}/download/md" class="btn-dl">spec.md ↓</a>
+      <a href="/spec/{{ spec.item_id }}/download/json" class="btn-dl">spec.json ↓</a>
+      <a href="/spec/{{ spec.item_id }}/download/prompts" class="btn-dl">ai_prompts.md ↓</a>
+    </div>
+  </div>
+
+  <div id="tab-architecture" class="tab-content">
+    <pre class="spec-text">{{ spec.architecture }}</pre>
+  </div>
+
+  <div id="tab-interfaces" class="tab-content">
+    <pre class="spec-text">{{ spec.interfaces }}</pre>
+  </div>
+
+  <div id="tab-plan" class="tab-content">
+    <ol class="plan-list">
+      {% for step in spec.implementation_plan %}
+      <li style="overflow-wrap:break-word;word-break:break-word;white-space:pre-wrap">{{ step }}</li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  <div id="tab-prompts" class="tab-content">
+    <p class="muted">아래 프롬프트를 Claude Code에 붙여넣어 바로 실행하세요.</p>
+    {% for prompt in spec.ai_prompts %}
+    <div class="prompt-card">
+      <div class="prompt-header">
+        <span class="prompt-type">{{ prompt.purpose }}</span>
+        <span class="prompt-summary">{{ prompt.human_summary }}</span>
+        <button onclick="copyPrompt('prompt-{{ loop.index }}')" class="btn-copy">복사</button>
+      </div>
+      <pre id="prompt-{{ loop.index }}" class="prompt-code">{{ prompt.prompt }}</pre>
+    </div>
+    {% else %}
+    <p class="muted">생성된 프롬프트가 없습니다.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+function showTab(name, e) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  (e ? e.target : event.target).classList.add('active');
+}
+function togglePrereqSection() {
+  const el = document.getElementById('prereq-container');
+  const icon = document.getElementById('prereq-toggle-icon');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    if (icon) icon.textContent = '▲';
+    // 아직 로드 안 됐으면 HTMX로 로드
+    if (!el.dataset.loaded) {
+      el.dataset.loaded = '1';
+      htmx.process(el);
+    }
+  } else {
+    el.style.display = 'none';
+    if (icon) icon.textContent = '▼';
+  }
+}
+function copyPrompt(id) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    event.target.textContent = '복사됨!';
+    setTimeout(() => event.target.textContent = '복사', 2000);
+  });
+}
+</script>

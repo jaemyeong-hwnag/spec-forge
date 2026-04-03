@@ -1,0 +1,19 @@
+{% if specs %}
+<ul class="specs-list">
+  {% for spec in specs %}
+  <li class="spec-item">
+    <div class="spec-item-header">
+      <span class="spec-title">{{ spec.title }}</span>
+      <span class="badge badge-{{ spec.status }}">{{ spec.status }}</span>
+    </div>
+    <div class="spec-item-meta">{{ spec.created_at[:19] if spec.created_at else '' }}</div>
+    <button hx-get="/spec/{{ spec.item_id }}"
+      hx-target="#spec-panel" hx-swap="innerHTML"
+      class="btn-view">열기</button>
+  </li>
+  {% endfor %}
+</ul>
+<div id="spec-panel"></div>
+{% else %}
+<p class="muted">생성된 스펙이 없습니다.</p>
+{% endif %}

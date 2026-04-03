@@ -1,0 +1,393 @@
+<!-- 레포별 독립 실행 카드 -->
+<div class="execute-panel" id="execute-panel">
+  <div class="exec-header">
+    <h3>레포별 실행</h3>
+    <p class="muted">각 레포지토리에 개별 프롬프트가 생성되었습니다.</p>
+  </div>
+
+  <!-- Git Flow 브랜치 설정 (공통) -->
+  <div class="gitflow-section">
+    <h4>Git Flow 브랜치</h4>
+    <div class="gitflow-row">
+      <select id="branch-type" class="branch-type-select" onchange="updateBranchPreview()">
+        <option value="feature">feature</option>
+        <option value="bugfix">bugfix</option>
+        <option value="hotfix">hotfix</option>
+        <option value="release">release</option>
+        <option value="chore">chore</option>
+      </select>
+      <span class="branch-sep">/</span>
+      <input type="text" id="branch-name" class="branch-name-input"
+        placeholder="branch-name" oninput="updateBranchPreview()">
+    </div>
+    <p class="branch-preview" id="branch-preview">브랜치 이름을 입력하세요</p>
+  </div>
+
+  <!-- 스킬 선택 -->
+  <div class="skill-section">
+    <h4>적용할 스킬</h4>
+    <div id="skill-checkboxes" class="skill-list">
+      <span class="muted" style="font-size:12px">로딩 중...</span>
+    </div>
+  </div>
+
+  <!-- 레포별 독립 카드 -->
+  {% for repo_name, prompt in repo_prompts.items() %}
+  <div class="repo-exec-card" id="card-{{ loop.index }}" data-repo="{{ repo_name }}">
+    <div class="repo-exec-header">
+      <span class="badge">{{ repo_name }}</span>
+      <div class="repo-exec-btns">
+        <button onclick="toggleHistory({{ loop.index }}, '{{ spec.item_id }}', '{{ repo_name }}')" class="btn-sm btn-view">프롬프트 보기</button>
+        <button onclick="copyText('rp-{{ loop.index }}')" class="btn-copy btn-sm">복사</button>
+        <button id="run-btn-{{ loop.index }}" onclick="runRepo('{{ spec.item_id }}', '{{ repo_name }}', {{ loop.index }})" class="btn-sm btn-generate">
+          ▶ 실행
+        </button>
+      </div>
+    </div>
+    <div id="history-{{ loop.index }}" class="repo-history-body" style="display:none">
+      <div class="run-entry run-entry-current">
+        <div class="run-entry-header">
+          <span class="run-entry-index">생성된 프롬프트</span>
+        </div>
+        <div class="run-entry-section">
+          <pre id="rp-{{ loop.index }}" class="prompt-code run-entry-pre">{{ prompt }}</pre>
+        </div>
+      </div>
+      <div id="run-history-{{ loop.index }}"></div>
+    </div>
+    <div id="stream-{{ loop.index }}" class="repo-stream-body" style="display:none">
+      <div class="repo-stream-status">
+        <span id="status-badge-{{ loop.index }}" class="badge badge-review">대기 중</span>
+      </div>
+      <pre id="log-{{ loop.index }}" class="stream-log"></pre>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="exec-actions">
+    <button onclick="runAllRepos('{{ spec.item_id }}')" class="btn-primary">
+      ▶ 전체 병렬 실행 ({{ repo_prompts | length }}개)
+    </button>
+    <button onclick="document.getElementById('execute-container').innerHTML=''" class="btn-view">
+      닫기
+    </button>
+  </div>
+</div>
+
+<script>
+// 전역 EventSource 추적 — 연결 고갈 방지
+if (!window._activeEventSources) window._activeEventSources = {};
+function _closeAllEventSources() {
+  Object.values(window._activeEventSources).forEach(es => { try { es.close(); } catch(e) {} });
+  window._activeEventSources = {};
+}
+// HTMX 컨텐츠 교체 전 SSE 종료
+document.addEventListener('htmx:beforeSwap', function(e) {
+  if (e.detail.target && (e.detail.target.id === 'execute-container' || e.detail.target.id === 'spec-panel')) {
+    _closeAllEventSources();
+  }
+});
+window.addEventListener('beforeunload', _closeAllEventSources);
+
+(function() {
+  const ITEM_ID = '{{ spec.item_id }}';
+
+  // ── 브랜치 미리보기 ────────────────────────────────────────────
+  window.updateBranchPreview = function() {
+    const type = document.getElementById('branch-type').value;
+    const name = document.getElementById('branch-name').value.trim();
+    const preview = document.getElementById('branch-preview');
+    if (!name) {
+      preview.textContent = '브랜치 이름을 입력하세요';
+      preview.style.color = 'var(--muted)';
+    } else {
+      preview.textContent = '→ ' + type + '/' + name;
+      preview.style.color = 'var(--accent)';
+    }
+  };
+
+  function getBranchParams() {
+    const type = document.getElementById('branch-type').value;
+    const name = document.getElementById('branch-name').value.trim();
+    if (!name) { alert('브랜치 이름을 입력하세요'); return null; }
+    return { type, name };
+  }
+
+  window.toggleHistory = function(idx, itemId, repoName) {
+    const el = document.getElementById('history-' + idx);
+    if (el.style.display !== 'none') {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = 'block';
+    const histEl = document.getElementById('run-history-' + idx);
+    if (histEl) {
+      fetch(`/execute/${itemId}/history/${encodeURIComponent(repoName)}`)
+        .then(r => r.text())
+        .then(html => { histEl.innerHTML = html; })
+        .catch(() => {});
+    }
+  };
+
+  window.copyText = function(id) {
+    navigator.clipboard.writeText(document.getElementById(id).textContent)
+      .then(() => { event.target.textContent = '복사됨!'; setTimeout(() => event.target.textContent = '복사', 2000); });
+  };
+
+  // ── 카드 인덱스 찾기 ────────────────────────────────────────────
+  function getIdxByRepo(repoName) {
+    let found = null;
+    document.querySelectorAll('.repo-exec-card').forEach((card) => {
+      if (card.dataset.repo === repoName) {
+        found = card.id.replace('card-', '');
+      }
+    });
+    return found;
+  }
+
+  // ── SSE 스트림 시작 / 재연결 ───────────────────────────────────
+  window.startRepoStream = function(itemId, repoName, idx, branchType, branchName, resumeOnly, modification, skills) {
+    const streamDiv = document.getElementById('stream-' + idx);
+    const logEl = document.getElementById('log-' + idx);
+    const statusBadge = document.getElementById('status-badge-' + idx);
+    const runBtn = document.getElementById('run-btn-' + idx);
+
+    streamDiv.style.display = 'block';
+    if (!resumeOnly) {
+      logEl.textContent = '';
+      statusBadge.textContent = '실행 중';
+      statusBadge.className = 'badge badge-review';
+    }
+    if (runBtn) runBtn.disabled = true;
+
+    const bt = branchType || document.getElementById('branch-type').value;
+    const bn = branchName || document.getElementById('branch-name').value.trim();
+    const mod = modification || '';
+    const sk = skills !== undefined ? skills : getSelectedSkills();
+    let url = `/execute/${itemId}/stream?branch_type=${encodeURIComponent(bt)}&branch_name=${encodeURIComponent(bn)}&only_repo=${encodeURIComponent(repoName)}`;
+    if (mod) url += `&modification=${encodeURIComponent(mod)}`;
+    if (sk) url += `&skills=${encodeURIComponent(sk)}`;
+    const es = new EventSource(url);
+    window._activeEventSources[repoName] = es;
+
+    es.onmessage = function(e) {
+      const data = JSON.parse(e.data);
+      if (data.status === 'all_done') {
+        es.close();
+        delete window._activeEventSources[repoName];
+        if (runBtn) runBtn.disabled = false;
+        return;
+      }
+      if (data.error) {
+        logEl.textContent += '[error] ' + data.error + '\n';
+        statusBadge.textContent = '오류';
+        statusBadge.className = 'badge badge-error';
+        es.close();
+        delete window._activeEventSources[repoName];
+        if (runBtn) runBtn.disabled = false;
+        showModifyForm(idx, itemId, repoName, bt, bn);
+        return;
+      }
+      if (data.status === 'done') {
+        statusBadge.textContent = '완료';
+        statusBadge.className = 'badge badge-complete';
+        removeStopButton(idx);
+        showModifyForm(idx, itemId, repoName, bt, bn);
+      } else if (data.status === 'error') {
+        statusBadge.textContent = '오류';
+        statusBadge.className = 'badge badge-error';
+        removeStopButton(idx);
+        showModifyForm(idx, itemId, repoName, bt, bn);
+      } else if (data.status === 'running' || data.status === 'started') {
+        if (statusBadge.textContent !== '완료' && statusBadge.textContent !== '오류') {
+          statusBadge.textContent = '실행 중';
+          statusBadge.className = 'badge badge-review';
+          showStopButton(idx, itemId, repoName);
+        }
+      }
+      if (data.line) {
+        logEl.textContent += data.line + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+    };
+
+    es.onerror = function() {
+      es.close();
+      delete window._activeEventSources[repoName];
+      // 실행 중 연결 끊김 — 상태 확인 후 자동 재연결
+      fetch(`/execute/${itemId}/status`)
+        .then(r => r.json())
+        .then(data => {
+          const info = data[repoName];
+          if (info && info.status === 'running') {
+            setTimeout(() => startRepoStream(itemId, repoName, idx, bt, bn, true), 3000);
+          } else {
+            if (runBtn) runBtn.disabled = false;
+          }
+        })
+        .catch(() => { if (runBtn) runBtn.disabled = false; });
+    };
+  };
+
+  // ── 중지 버튼 ────────────────────────────────────────────────
+  window.showStopButton = function(idx, itemId, repoName) {
+    if (document.getElementById('stop-btn-' + idx)) return;
+    const statusDiv = document.querySelector('#stream-' + idx + ' .repo-stream-status');
+    if (!statusDiv) return;
+    const btn = document.createElement('button');
+    btn.id = 'stop-btn-' + idx;
+    btn.className = 'btn-sm';
+    btn.style.cssText = 'background:#ef4444;color:#fff;border:none;margin-left:8px;';
+    btn.textContent = '■ 중지';
+    btn.onclick = () => stopExecution(idx, itemId, repoName);
+    statusDiv.appendChild(btn);
+  };
+
+  window.stopExecution = async function(idx, itemId, repoName) {
+    await fetch(`/execute/${itemId}/stop/${repoName}`, {method: 'POST'});
+    const btn = document.getElementById('stop-btn-' + idx);
+    if (btn) btn.remove();
+    const statusBadge = document.getElementById('status-badge-' + idx);
+    if (statusBadge) { statusBadge.textContent = '중지됨'; statusBadge.className = 'badge'; }
+    const runBtn = document.getElementById('run-btn-' + idx);
+    if (runBtn) runBtn.disabled = false;
+    if (window._activeEventSources && window._activeEventSources[repoName]) {
+      window._activeEventSources[repoName].close();
+      delete window._activeEventSources[repoName];
+    }
+    showModifyForm(idx, itemId, repoName, '', '');
+  };
+
+  function removeStopButton(idx) {
+    const btn = document.getElementById('stop-btn-' + idx);
+    if (btn) btn.remove();
+  }
+
+  // ── 완료 후 수정 요청 폼 ──────────────────────────────────────
+  function getSelectedSkills() {
+    return Array.from(document.querySelectorAll('.skill-checkbox:checked'))
+      .map(el => el.value).join(',');
+  }
+
+  window.showModifyForm = function(idx, itemId, repoName, bt, bn) {
+    if (document.getElementById('modify-form-' + idx)) return;
+    const card = document.getElementById('card-' + idx);
+    if (!card) return;
+    // 현재 전역 스킬 선택 상태 스냅샷
+    const skillsSnap = getSelectedSkills();
+    // 수정 폼 내 스킬 체크박스 (전역과 독립적으로 선택 가능)
+    const skillCheckboxesHtml = window._availableSkills
+      ? window._availableSkills.map(s => {
+          const checked = skillsSnap.split(',').includes(s.id) ? 'checked' : '';
+          return `<label class="skill-label"><input type="checkbox" class="modify-skill-checkbox" value="${s.id}" data-idx="${idx}" ${checked}> ${s.label}</label>`;
+        }).join('')
+      : '';
+    const form = document.createElement('div');
+    form.id = 'modify-form-' + idx;
+    form.className = 'modify-form';
+    form.innerHTML = `
+      <div class="modify-header">수정 요청</div>
+      ${skillCheckboxesHtml ? `<div class="skill-list" style="margin-bottom:4px">${skillCheckboxesHtml}</div>` : ''}
+      <textarea id="modify-input-${idx}" class="modify-input" rows="3"
+        placeholder="수정하거나 추가할 사항을 입력하세요..."></textarea>
+      <button onclick="submitModify('${idx}','${itemId}','${repoName}','${bt}','${bn}')"
+        class="btn-sm btn-generate">↺ 수정 실행</button>
+    `;
+    card.appendChild(form);
+  };
+
+  window.submitModify = function(idx, itemId, repoName, bt, bn) {
+    const input = document.getElementById('modify-input-' + idx);
+    const modification = input ? input.value.trim() : '';
+    if (!modification) { alert('수정 요청 내용을 입력하세요'); return; }
+    const modifySkills = Array.from(document.querySelectorAll(`.modify-skill-checkbox[data-idx="${idx}"]:checked`))
+      .map(el => el.value).join(',');
+    const form = document.getElementById('modify-form-' + idx);
+    if (form) form.remove();
+    startRepoStream(itemId, repoName, idx, bt, bn, false, modification, modifySkills);
+  };
+
+  window.runRepo = function(itemId, repoName, idx) {
+    const b = getBranchParams();
+    if (!b) return;
+    startRepoStream(itemId, repoName, idx, b.type, b.name, false);
+  };
+
+  window.runAllRepos = function(itemId) {
+    const b = getBranchParams();
+    if (!b) return;
+    const sk = getSelectedSkills();
+    document.querySelectorAll('.repo-exec-card').forEach((card) => {
+      const repoName = card.dataset.repo;
+      const idx = card.id.replace('card-', '');
+      if (repoName && idx) startRepoStream(itemId, repoName, idx, b.type, b.name, false, '', sk);
+    });
+  };
+
+  // ── 스킬 목록 로드 ────────────────────────────────────────────
+  window._availableSkills = [];
+  fetch('/execute/skills')
+    .then(r => r.json())
+    .then(skills => {
+      window._availableSkills = skills;
+      const el = document.getElementById('skill-checkboxes');
+      if (!el) return;
+      if (!skills.length) { el.innerHTML = '<span class="muted" style="font-size:12px">선택 가능한 스킬 없음</span>'; return; }
+      el.innerHTML = skills.map(s =>
+        `<label class="skill-label" title="${s.description}">` +
+        `<input type="checkbox" class="skill-checkbox" value="${s.id}"> ${s.label}` +
+        `</label>`
+      ).join('');
+    })
+    .catch(() => {
+      const el = document.getElementById('skill-checkboxes');
+      if (el) el.innerHTML = '';
+    });
+
+  // ── 페이지 로드 시 기존 실행 상태 복원 ────────────────────────
+  fetch(`/execute/${ITEM_ID}/status`)
+    .then(r => r.json())
+    .then(data => {
+      Object.entries(data).forEach(([repo, info]) => {
+        const idx = getIdxByRepo(repo);
+        if (!idx) return;
+        const streamDiv = document.getElementById('stream-' + idx);
+        const logEl = document.getElementById('log-' + idx);
+        const statusBadge = document.getElementById('status-badge-' + idx);
+        const runBtn = document.getElementById('run-btn-' + idx);
+
+        if (!info.status || info.status === 'pending') return;
+
+        streamDiv.style.display = 'block';
+
+        // 기존 로그 렌더링
+        (info.log || []).forEach(entry => {
+          if (entry.val) logEl.textContent += entry.val + '\n';
+        });
+        logEl.scrollTop = logEl.scrollHeight;
+
+        if (info.status === 'done') {
+          statusBadge.textContent = '완료';
+          statusBadge.className = 'badge badge-complete';
+          showModifyForm(idx, ITEM_ID, repo, '', '');
+        } else if (info.status === 'error') {
+          statusBadge.textContent = '오류';
+          statusBadge.className = 'badge badge-error';
+          showModifyForm(idx, ITEM_ID, repo, '', '');
+        } else if (info.status === 'stopped') {
+          statusBadge.textContent = '중지됨';
+          statusBadge.className = 'badge';
+          showModifyForm(idx, ITEM_ID, repo, '', '');
+        } else if (info.status === 'running') {
+          statusBadge.textContent = '실행 중';
+          statusBadge.className = 'badge badge-review';
+          if (runBtn) runBtn.disabled = true;
+          showStopButton(idx, ITEM_ID, repo);
+          // 실행 중인 프로세스에 tail로 재연결
+          startRepoStream(ITEM_ID, repo, idx, '', '', true);
+        }
+      });
+    })
+    .catch(() => {});
+})();
+</script>

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="toolbar">
+  <h1>백로그</h1>
+</div>
+
+<div class="url-section">
+  <form
+    hx-post="/backlog/fetch"
+    hx-target="#backlog-container"
+    hx-indicator="#fetch-spinner"
+    class="url-form"
+    id="url-form">
+    <input
+      type="url"
+      name="url"
+      id="notion-url-input"
+      placeholder="Notion 페이지 URL을 붙여넣으세요 (https://www.notion.so/...)"
+      required
+      class="url-input"
+      autocomplete="off">
+    <button type="submit" class="btn-fetch">불러오기</button>
+    <span id="fetch-spinner" class="htmx-indicator">로딩 중...</span>
+  </form>
+
+  <div id="notion-status" class="notion-status"
+    hx-get="/api/notion/status"
+    hx-trigger="load"
+    hx-swap="innerHTML">
+  </div>
+</div>
+
+<div id="backlog-container"
+  hx-get="/backlog"
+  hx-trigger="load"
+  hx-swap="innerHTML">
+</div>
+<div id="spec-panel"></div>
+
+<script>
+  // 최근 사용한 URL 기록 (localStorage)
+  const HISTORY_KEY = 'notion_url_history';
+  const MAX_HISTORY = 5;
+
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  }
+
+  function saveToHistory(url) {
+    let h = getHistory().filter(u => u !== url);
+    h.unshift(url);
+    h = h.slice(0, MAX_HISTORY);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const h = getHistory();
+    const el = document.getElementById('url-history');
+    if (!el) return;
+    if (!h.length) { el.innerHTML = ''; return; }
+    el.innerHTML = '<span class="history-label">최근:</span>' +
+      h.map(u => {
+        const short = u.replace('https://www.notion.so/', '').slice(0, 50);
+        return `<button class="history-item" onclick="useHistory('${u.replace(/'/g,"\\'")}')">` + short + '</button>';
+      }).join('');
+  }
+
+  function useHistory(url) {
+    document.getElementById('notion-url-input').value = url;
+    document.getElementById('notion-url-input').focus();
+  }
+
+  // 폼 제출 시 URL 기록 저장
+  document.getElementById('url-form').addEventListener('htmx:beforeRequest', function() {
+    const url = document.getElementById('notion-url-input').value.trim();
+    if (url) saveToHistory(url);
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // history 영역 삽입
+    const form = document.getElementById('url-form');
+    const hist = document.createElement('div');
+    hist.id = 'url-history';
+    hist.className = 'url-history';
+    form.parentNode.insertBefore(hist, form.nextSibling);
+    renderHistory();
+  });
+</script>
+{% endblock %}

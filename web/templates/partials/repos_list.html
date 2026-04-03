@@ -1,0 +1,35 @@
+<div class="repos-section">
+  <h3>등록된 레포</h3>
+  {% if repos %}
+  <table class="repos-table">
+    <thead><tr><th>이름</th><th>타입</th><th>소스</th><th>캐시</th><th>액션</th></tr></thead>
+    <tbody>
+    {% for repo in repos %}
+    {% set ck = ("local:" if repo.type == "local" else "github:") + repo.source %}
+    <tr>
+      <td>{{ repo.name }}</td>
+      <td><span class="badge">{{ repo.type }}</span></td>
+      <td class="source-path">{{ repo.source }}</td>
+      <td>
+        {% if ck in cached %}
+        <span class="badge badge-cached">캐시됨 {{ cached[ck].cached_at[:10] }}</span>
+        <button hx-post="/repos/{{ repo.name }}/invalidate"
+          hx-target="#repos-container" hx-swap="innerHTML" class="btn-sm">무효화</button>
+        {% else %}
+        <span class="badge badge-nocache">없음</span>
+        {% endif %}
+      </td>
+      <td>
+        <button hx-delete="/repos/{{ repo.name }}"
+          hx-target="#repos-container" hx-swap="innerHTML"
+          hx-confirm="{{ repo.name }} 레포를 삭제하시겠습니까?"
+          class="btn-danger btn-sm">삭제</button>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">등록된 레포가 없습니다.</p>
+  {% endif %}
+</div>

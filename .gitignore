@@ -1,0 +1,64 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+
+# 보안: 환경변수 및 시크릿
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.secret
+secrets.json
+secrets.yaml
+secrets.yml
+
+# 보안: 클라우드 자격증명
+.aws/
+.gcp/
+.azure/
+credentials
+*_credentials.json
+service-account*.json
+*-service-account*.json
+
+# 보안: API 키 및 토큰
+*.token
+api_keys.*
+auth.json
+
+# 설정 (토큰 포함)
+config/settings.json
+
+# 생성 결과물 (git 추적 제외)
+output/
+repos/
+.cache/
+.traces/
+.evals/
+
+# Claude Code 로컬 설정 (내부 경로 및 권한 포함)
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+node_modules/
+dist/
+build/
+*.egg-info/

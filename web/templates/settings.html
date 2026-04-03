@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}설정 — Spec Generator{% endblock %}
+{% block content %}
+<h1>설정</h1>
+
+{% if saved %}
+<p class="success">설정이 저장되었습니다.</p>
+{% endif %}
+
+<form method="post" action="/settings" class="settings-form">
+  <section class="settings-section">
+    <h2>백로그 소스</h2>
+    <div class="field">
+      <label>Provider</label>
+      <select name="backlog_provider">
+        <option value="notion" {% if settings.backlog_provider == 'notion' %}selected{% endif %}>Notion</option>
+      </select>
+    </div>
+    <details class="notion-guide">
+      <summary>Notion 연동 설정 방법</summary>
+      <ol class="guide-steps">
+        <li><a href="https://www.notion.so/my-integrations" target="_blank">notion.so/my-integrations</a> 접속 → <strong>+ New integration</strong></li>
+        <li>이름 입력 (예: Workflow Spec) → <strong>Submit</strong></li>
+        <li><strong>Internal Integration Secret</strong> 복사 → 아래 Token 입력란에 붙여넣기</li>
+        <li>Notion에서 사용할 페이지 열기 → 우측 상단 <strong>…</strong> → <strong>Connections</strong> → 방금 만든 Integration 연결</li>
+        <li>메인 화면에서 해당 페이지 URL을 붙여넣어 스펙 생성</li>
+      </ol>
+    </details>
+    <div class="field">
+      <label>Notion API Token</label>
+      <input type="password" name="notion_token" value="{{ settings.notion_token }}"
+        placeholder="secret_...">
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <h2>Figma <span class="optional">(선택)</span></h2>
+    <details class="notion-guide">
+      <summary>Figma 연동 설정 방법</summary>
+      <ol class="guide-steps">
+        <li><a href="https://www.figma.com/settings" target="_blank">figma.com/settings</a> 접속 → <strong>Personal access tokens</strong></li>
+        <li><strong>Generate new token</strong> → 이름 입력 → 토큰 복사</li>
+        <li>아래 입력란에 붙여넣기</li>
+      </ol>
+    </details>
+    <div class="field">
+      <label>Figma Personal Access Token</label>
+      <input type="password" name="figma_token" value="{{ settings.figma_token }}"
+        placeholder="figd_...">
+      <p class="hint">설정하면 스펙 생성 시 Figma 링크를 참조할 수 있습니다.</p>
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <h2>AI 설정</h2>
+    <div class="field">
+      <label>Provider</label>
+      <select name="ai_provider">
+        <option value="claude-code" {% if settings.ai_provider == 'claude-code' %}selected{% endif %}>Claude Code (현재 세션 — API 키 불필요)</option>
+        <option value="claude" {% if settings.ai_provider == 'claude' %}selected{% endif %}>Claude API (Anthropic SDK)</option>
+      </select>
+      <p class="hint">Claude Code 선택 시: <code>claude</code> CLI가 PATH에 있어야 합니다.</p>
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" name="ai_api_key" value="{{ settings.ai_api_key }}" placeholder="sk-ant-...">
+    </div>
+    <div class="field">
+      <label>Model</label>
+      <select name="ai_model">
+        <option value="claude-sonnet-4-6" {% if settings.ai_model == 'claude-sonnet-4-6' %}selected{% endif %}>claude-sonnet-4-6</option>
+        <option value="claude-opus-4-6" {% if settings.ai_model == 'claude-opus-4-6' %}selected{% endif %}>claude-opus-4-6</option>
+        <option value="claude-haiku-4-5-20251001" {% if settings.ai_model == 'claude-haiku-4-5-20251001' %}selected{% endif %}>claude-haiku-4-5 (빠름)</option>
+      </select>
+    </div>
+  </section>
+
+  <section class="settings-section">
+    <h2>서버</h2>
+    <div class="field">
+      <label>Host</label>
+      <input type="text" name="host" value="{{ settings.host }}">
+    </div>
+    <div class="field">
+      <label>Port</label>
+      <input type="number" name="port" value="{{ settings.port }}" min="10000">
+    </div>
+    <div class="field">
+      <label>출력 디렉토리</label>
+      <input type="text" name="output_dir" value="{{ settings.output_dir }}">
+    </div>
+  </section>
+
+  <button type="submit" class="btn-primary">저장</button>
+</form>
+
+<section class="settings-section">
+  <h2>코드 레포지토리</h2>
+  <div id="repos-container"
+    hx-get="/repos"
+    hx-trigger="load"
+    hx-swap="innerHTML">로딩 중...</div>
+
+  <form hx-post="/repos/add" hx-target="#repos-container" hx-swap="innerHTML" class="repo-add-form">
+    <h3>레포 추가</h3>
+    <div class="repo-form-row">
+      <div class="field">
+        <label>이름</label>
+        <input type="text" name="name" placeholder="my-app" required>
+      </div>
+      <div class="field">
+        <label>타입</label>
+        <select name="type">
+          <option value="local">로컬 경로</option>
+          <option value="github">GitHub URL</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>소스 (경로 또는 URL)</label>
+        <input type="text" name="source" placeholder="/Users/… 또는 https://github.com/…" required>
+      </div>
+      <button type="submit" class="btn-primary">추가</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

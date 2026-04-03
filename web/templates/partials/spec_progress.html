@@ -1,0 +1,77 @@
+<!-- 스펙 생성 진행 상황 -->
+<div class="spec-panel" id="spec-progress-panel">
+  <div class="spec-header">
+    <h2>{{ title }}</h2>
+    <span class="badge badge-review">생성 중</span>
+  </div>
+
+  <div class="progress-steps" id="progress-steps">
+    <div class="progress-step" id="step-notion">
+      <span class="step-icon">⏳</span>
+      <span class="step-label">Notion 내용 로드</span>
+      <span class="step-msg" id="step-notion-msg"></span>
+    </div>
+    <div class="progress-step pending" id="step-scan">
+      <span class="step-icon">○</span>
+      <span class="step-label">레포 코드 스캔</span>
+      <span class="step-msg" id="step-scan-msg"></span>
+    </div>
+    <div class="progress-step pending" id="step-pattern">
+      <span class="step-icon">○</span>
+      <span class="step-label">코드 패턴 분석</span>
+      <span class="step-msg" id="step-pattern-msg"></span>
+    </div>
+    <div class="progress-step pending" id="step-draft">
+      <span class="step-icon">○</span>
+      <span class="step-label">AI 스펙 초안 생성</span>
+      <span class="step-msg" id="step-draft-msg"></span>
+    </div>
+  </div>
+
+  <div id="progress-error" class="error" style="display:none;margin-top:16px"></div>
+</div>
+
+<script>
+(function() {
+  const es = new EventSource('/spec/generate/{{ item_id }}/stream');
+
+  function setStep(step, status, msg) {
+    const el = document.getElementById('step-' + step);
+    const msgEl = document.getElementById('step-' + step + '-msg');
+    if (!el) return;
+    el.className = 'progress-step ' + status;
+    const icons = { running: '⏳', done: '✅', error: '❌' };
+    el.querySelector('.step-icon').textContent = icons[status] || '○';
+    if (msgEl && msg) msgEl.textContent = msg;
+  }
+
+  es.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+
+    if (data.step === 'error') {
+      es.close();
+      const errEl = document.getElementById('progress-error');
+      errEl.style.display = 'block';
+      errEl.textContent = '오류: ' + data.msg;
+      document.querySelector('#spec-progress-panel .badge').textContent = '오류';
+      document.querySelector('#spec-progress-panel .badge').className = 'badge badge-error';
+      return;
+    }
+
+    if (data.step === 'all_done') {
+      es.close();
+      htmx.ajax('GET', '/spec/arch/' + data.item_id, '#spec-panel');
+      return;
+    }
+
+    setStep(data.step, data.status, data.msg);
+  };
+
+  es.onerror = function() {
+    es.close();
+    const errEl = document.getElementById('progress-error');
+    errEl.style.display = 'block';
+    errEl.textContent = '서버 연결이 끊겼습니다. 페이지를 새로고침하세요.';
+  };
+})();
+</script>

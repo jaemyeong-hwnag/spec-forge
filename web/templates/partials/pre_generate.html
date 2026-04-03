@@ -1,0 +1,142 @@
+<!-- 스펙 생성 전 사용자 의견 입력 -->
+<div class="spec-panel">
+  <div class="spec-header">
+    <h2>{{ item.title }}</h2>
+    <span class="badge">스펙 생성 전 의견 입력</span>
+  </div>
+
+  <form
+    hx-post="/spec/generate/{{ item.id }}"
+    hx-target="#spec-panel"
+    hx-swap="innerHTML">
+
+    <!-- 작업 유형 -->
+    <div class="field">
+      <label>작업 유형</label>
+      <div class="work-type-group">
+        <label class="work-type-item">
+          <input type="radio" name="work_type" value="backend" checked>
+          <span class="work-type-label"><span class="work-type-icon">⚙</span><span>백엔드</span></span>
+        </label>
+        <label class="work-type-item">
+          <input type="radio" name="work_type" value="frontend">
+          <span class="work-type-label"><span class="work-type-icon">◻</span><span>프론트엔드</span></span>
+        </label>
+        <label class="work-type-item">
+          <input type="radio" name="work_type" value="fullstack">
+          <span class="work-type-label"><span class="work-type-icon">⚡</span><span>풀스택</span></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 기술 스택 (기존 코드 보호) -->
+    <div class="field">
+      <label>기존 기술 스택 <span class="optional">(선택 — 기존 코드를 깨지 않도록 AI에 전달)</span></label>
+      <div class="stack-grid">
+        <div class="stack-col">
+          <p class="stack-col-label">언어 / 런타임</p>
+          <div class="stack-checks">
+            {% for s in ["Python", "TypeScript", "JavaScript", "Go", "Java", "Kotlin", "Rust"] %}
+            <label class="stack-chip"><input type="checkbox" name="tech_stack" value="{{ s }}"><span>{{ s }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="stack-col">
+          <p class="stack-col-label">프레임워크</p>
+          <div class="stack-checks">
+            {% for s in ["FastAPI", "Django", "Flask", "Express", "NestJS", "Next.js", "React", "Vue", "Spring"] %}
+            <label class="stack-chip"><input type="checkbox" name="tech_stack" value="{{ s }}"><span>{{ s }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="stack-col">
+          <p class="stack-col-label">데이터베이스 / 인프라</p>
+          <div class="stack-checks">
+            {% for s in ["PostgreSQL", "MySQL", "MongoDB", "Redis", "Docker", "Kubernetes", "AWS", "GCP"] %}
+            <label class="stack-chip"><input type="checkbox" name="tech_stack" value="{{ s }}"><span>{{ s }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <input type="text" name="tech_stack_custom" class="stack-custom-input"
+        placeholder="직접 입력 (예: SQLAlchemy, Celery, gRPC)">
+    </div>
+
+    <!-- 사용 스킬 -->
+    <div class="field">
+      <label>사용할 스킬 <span class="optional">(선택)</span></label>
+      <div class="skill-checks">
+        <label class="skill-check-item">
+          <input type="checkbox" name="skills" value="test-plan" checked>
+          <span class="skill-check-label">테스트 플랜 생성</span>
+          <span class="skill-check-desc">유닛·통합·E2E 테스트 계획 포함</span>
+        </label>
+        <label class="skill-check-item">
+          <input type="checkbox" name="skills" value="test-prompt" checked>
+          <span class="skill-check-label">테스트 프롬프트 생성</span>
+          <span class="skill-check-desc">Claude Code용 테스트 구현 프롬프트</span>
+        </label>
+        <label class="skill-check-item">
+          <input type="checkbox" name="skills" value="prompt-optimizer" checked>
+          <span class="skill-check-label">프롬프트 최적화</span>
+          <span class="skill-check-desc">생성된 프롬프트를 토큰 효율화</span>
+        </label>
+        <label class="skill-check-item">
+          <input type="checkbox" name="skills" value="code-documentation">
+          <span class="skill-check-label">주석 / API 스펙</span>
+          <span class="skill-check-desc">언어별 주석(KDoc·Javadoc·JSDoc·docstring 등) 및 REST OpenAPI 스펙 자동 추가</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 요구사항 / 배경 -->
+    <div class="field">
+      <label>요구사항 / 배경 <span class="optional">(선택)</span></label>
+      <textarea name="user_context" rows="4"
+        placeholder="예: 결제 모듈에 환불 기능 추가. 기존 PaymentService는 건드리지 않고 별도 RefundService로 분리."></textarea>
+    </div>
+
+    <!-- 우선순위 / 제약 -->
+    <div class="field">
+      <label>우선순위 / 추가 제약 <span class="optional">(선택)</span></label>
+      <textarea name="user_constraints" rows="2"
+        placeholder="예: 이번 스프린트 내 구현 필요. 기존 DB 스키마 변경 불가."></textarea>
+    </div>
+
+    <!-- Figma -->
+    <div class="field">
+      <label>Figma 디자인 링크 <span class="optional">(선택)</span></label>
+      <input type="url" name="figma_url"
+        placeholder="https://www.figma.com/design/..."
+        class="url-input">
+      {% if not figma_token_set %}
+      <p class="hint">⚠ Figma 토큰 미설정 — URL만 AI 컨텍스트로 전달됩니다. <a href="/settings">설정하기</a></p>
+      {% endif %}
+    </div>
+
+    <!-- 레포 선택 -->
+    <div class="field">
+      <label>참조할 레포지토리</label>
+      {% if repos %}
+      <div class="repo-checklist">
+        {% for repo in repos %}
+        <label class="repo-check-item">
+          <input type="checkbox" name="selected_repos" value="{{ repo.name }}" checked>
+          <span class="repo-check-name">{{ repo.name }}</span>
+          <span class="repo-check-type badge">{{ repo.kind }}</span>
+          <span class="repo-check-source">{{ repo.source }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="notice-box">
+        레포지토리가 없습니다. <a href="/settings" class="link-settings">설정에서 추가하세요 →</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn-generate" {% if not repos %}disabled{% endif %}>AI 초안 생성</button>
+    </div>
+  </form>
+</div>

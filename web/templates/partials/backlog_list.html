@@ -1,0 +1,50 @@
+{% if error %}
+<p class="error">{{ error }} <a href="/settings" class="link-settings">→ 설정으로 이동</a></p>
+{% endif %}
+
+{% if item %}
+<div class="backlog-item">
+  <div class="item-header">
+    <span class="item-title">{{ item.title }}</span>
+    <div class="item-meta-actions">
+      {% if item.url %}
+      <a href="{{ item.url }}" target="_blank" class="notion-link">Notion ↗</a>
+      {% endif %}
+      <button
+        hx-delete="/backlog/current"
+        hx-target="#backlog-container"
+        hx-swap="innerHTML"
+        class="btn-sm btn-danger"
+        title="다른 URL 입력">
+        ✕ 변경
+      </button>
+    </div>
+  </div>
+  <div class="item-actions">
+    <button
+      hx-get="/spec/input/{{ item.id }}"
+      hx-target="#spec-panel"
+      hx-swap="innerHTML"
+      class="btn-generate">
+      스펙 생성
+    </button>
+    <button
+      hx-get="/spec/{{ item.id }}"
+      hx-target="#spec-panel"
+      hx-swap="innerHTML"
+      class="btn-view">
+      저장된 스펙
+    </button>
+    <span id="spinner-item" class="htmx-indicator">생성 중...</span>
+  </div>
+</div>
+{% elif not error %}
+{% if not token_set %}
+<div class="notice-box">
+  <span>Notion API 토큰이 설정되지 않았습니다.</span>
+  <a href="/settings" class="btn-sm btn-view">설정하기 →</a>
+</div>
+{% else %}
+<p class="muted">Notion 페이지 URL을 입력하면 해당 아이템으로 스펙을 생성합니다.</p>
+{% endif %}
+{% endif %}

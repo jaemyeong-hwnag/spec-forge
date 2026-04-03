@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Workflow Spec Generator{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/" class="nav-brand">Spec Generator</a>
+    <div class="nav-links">
+      <a href="/" hx-get="/backlog" hx-target="#main" hx-push-url="/">백로그</a>
+      <a href="/specs" hx-get="/specs/list" hx-target="#main" hx-push-url="/specs">생성된 스펙</a>
+      <a href="/settings">설정</a>
+    </div>
+  </nav>
+  <main id="main">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

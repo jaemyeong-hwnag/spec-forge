@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}생성된 스펙 — Workflow Spec Generator{% endblock %}
+{% block content %}
+<div id="specs-container"
+  hx-get="/specs/list"
+  hx-trigger="load"
+  hx-swap="innerHTML">
+</div>
+{% endblock %}

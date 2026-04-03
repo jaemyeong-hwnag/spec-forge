@@ -1,0 +1,25 @@
+{% if runs %}
+{% for run in runs %}
+<div class="run-entry">
+  <div class="run-entry-header">
+    <span class="run-entry-index">실행 {{ loop.index }}</span>
+    <span class="badge {% if run.status == 'done' %}badge-complete{% elif run.status == 'error' %}badge-error{% else %}badge-review{% endif %}">
+      {% if run.status == 'done' %}완료{% elif run.status == 'error' %}오류{% elif run.status == 'stopped' %}중지됨{% else %}실행 중{% endif %}
+    </span>
+    <span class="muted run-entry-ts">{{ run.ts }}</span>
+  </div>
+  <div class="run-entry-section">
+    <div class="run-entry-label">프롬프트</div>
+    <pre class="prompt-code run-entry-pre">{{ run.prompt }}</pre>
+  </div>
+  {% if run.lines %}
+  <div class="run-entry-section">
+    <div class="run-entry-label">실행 결과</div>
+    <pre class="stream-log run-entry-pre">{{ run.lines | join('\n') }}</pre>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p class="muted" style="padding:8px 0;font-size:12px">아직 실행 이력이 없습니다.</p>
+{% endif %}
